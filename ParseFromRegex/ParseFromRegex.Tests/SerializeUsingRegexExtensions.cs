@@ -1,3 +1,6 @@
+using System;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace ParseFromRegex.Tests
@@ -21,6 +24,8 @@ namespace ParseFromRegex.Tests
             Assert.Equal("19", values["Age"]);
         }
 
+        public record Person(string FirstName, string LastName, int Age);
+
         [Fact]
         public void DeserializeFromRegex_ReturnsInstanceWithAllValues()
         {
@@ -36,6 +41,58 @@ namespace ParseFromRegex.Tests
             Assert.Equal(19, person.Age);
         }
 
-        public record Person(string FirstName, string LastName, int Age);
+        public enum Sex
+        {
+            F,
+            M
+        }
+
+        public record PersonWithSex(string FirstName, string LastName, int Age, Sex Sex);
+
+        public class SexConverter : JsonConverter
+        {
+            public override bool CanConvert(Type objectType)
+            {
+                return objectType == typeof(Sex);
+            }
+
+            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+            {
+                if (reader.TokenType == JsonToken.Null)
+                {
+                    return null;
+                }
+
+                var s = (string)JToken.Load(reader);
+
+                var customerPatientGender = s == "Male"
+                    ? Sex.M
+                    : Sex.F;
+                return customerPatientGender;
+            }
+
+            public override bool CanWrite => false;
+
+            public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        [Fact]
+        public void DeserializeFromRegex_WithCustomJsonConverter_ReturnsInstanceWithAllValues()
+        {
+            var input = "Connor, Sarah (19) Female";
+            var pattern = @"^(?<LastName>\w.*), (?<FirstName>\w.*) \((?<Age>\w.*)\) (?<Sex>\w.*)";
+
+            var person = input.DeserializeFromRegex<PersonWithSex>(pattern, new SexConverter());
+
+            Assert.NotNull(person);
+
+            Assert.Equal("Sarah", person.FirstName);
+            Assert.Equal("Connor", person.LastName);
+            Assert.Equal(19, person.Age);
+            Assert.Equal(Sex.F, person.Sex);
+        }
     }
 }
